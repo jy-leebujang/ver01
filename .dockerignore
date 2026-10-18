@@ -1,0 +1,13 @@
+# Created: 2026-10-18 19:32
+node_modules
+data
+*.db
+*.db-wal
+*.db-shm
+architecture.html
+prompts.md
+CLAUDE.md
+README.md
+scripts
+.claude
+.git

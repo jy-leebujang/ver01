@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<!-- Created: 2026-10-18 14:15 -->
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>상식 퀴즈 시스템 설계</title>
+<style>
+:root{--bg:#fafaf7;--fg:#1d1d1b;--mute:#6b6b66;--line:#c9c9c0;--box:#ffffff;--a:#e6f0ff;--a-s:#2b6cb0;--b:#e8f5e9;--b-s:#2f855a;--c:#fff4e0;--c-s:#b7791f;--d:#f1e8fb;--d-s:#6b46c1;--nas:#f3f4f6}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--fg:#ecece8;--mute:#9a9a92;--line:#4a4a44;--box:#22221f;--a:#17304f;--a-s:#7db4f0;--b:#16301c;--b-s:#6fcf97;--c:#3a2c10;--c-s:#f0b95c;--d:#2a1f40;--d-s:#b79af0;--nas:#1f2023}}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.7 -apple-system,"Segoe UI","Malgun Gothic",sans-serif}
+main{max-width:980px;margin:0 auto;padding:32px 16px 80px}
+h1{font-size:28px;margin:0 0 4px}h2{font-size:22px;margin:48px 0 8px;border-top:1px solid var(--line);padding-top:24px}h3{font-size:17px;margin:24px 0 4px}
+p,li{max-width:70ch}.mute{color:var(--mute)}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:15px}th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}th{background:var(--nas)}
+code{background:var(--nas);padding:1px 6px;border-radius:4px;font-size:14px}
+pre{background:var(--nas);padding:12px 14px;border-radius:6px;overflow:auto;font-size:14px;line-height:1.5}
+.fig{overflow-x:auto;margin:12px 0}.fig svg{min-width:760px;width:100%;height:auto}
+svg text{fill:var(--fg);font:14px "Malgun Gothic",-apple-system,sans-serif}svg .s{font-size:12px;fill:var(--mute)}svg .b{font-weight:700}
+svg .bx{fill:var(--box);stroke:var(--line);stroke-width:1.5}
+svg .ca{fill:var(--a);stroke:var(--a-s);stroke-width:1.5}svg .cb{fill:var(--b);stroke:var(--b-s);stroke-width:1.5}svg .cc{fill:var(--c);stroke:var(--c-s);stroke-width:1.5}svg .cd{fill:var(--d);stroke:var(--d-s);stroke-width:1.5}svg .nas{fill:var(--nas);stroke:var(--line);stroke-width:2;stroke-dasharray:6 4}
+svg .ar{stroke:var(--fg);stroke-width:1.6;fill:none;marker-end:url(#h)}svg .ard{stroke:var(--mute);stroke-width:1.6;fill:none;stroke-dasharray:5 4;marker-end:url(#h)}svg .ll{stroke:var(--line);stroke-width:1.5;stroke-dasharray:4 4}
+</style>
+</head>
+<body>
+<main>
+<h1>상식 퀴즈 시스템 설계</h1>
+<p class="mute">초보자용 설명서 · 물리적 구조(어떤 장비가 어디에 있나)와 논리적 구조(프로그램이 어떤 층으로 나뉘나)를 함께 본다.</p>
+
+<h2>0. 먼저 알아둘 말</h2>
+<table>
+<tr><th>용어</th><th>쉬운 설명</th></tr>
+<tr><td>브라우저(클라이언트)</td><td>사용자가 쓰는 크롬·사파리. 게임 화면이 여기서 돌아간다.</td></tr>
+<tr><td>서버</td><td>항상 켜져 있으면서 요청을 받아 답을 주는 프로그램. 여기서는 NAS 안에서 돈다.</td></tr>
+<tr><td>DB(데이터베이스)</td><td>데이터를 정리해 담아 두는 저장소. 여기서는 파일 하나(<code>quiz.db</code>)로 된 SQLite를 쓴다.</td></tr>
+<tr><td>API</td><td>브라우저가 서버에 "이거 줘/이거 저장해" 하고 말하는 약속된 주소들. 예: <code>/api/ranking</code></td></tr>
+<tr><td>Docker 컨테이너</td><td>프로그램과 실행 환경을 한 상자에 담은 것. NAS에서는 Container Manager 앱이 상자를 돌려 준다.</td></tr>
+<tr><td>리버스 프록시</td><td>바깥 요청을 받아 안쪽 프로그램에 전달해 주는 문지기. HTTPS(자물쇠) 처리도 맡는다.</td></tr>
+<tr><td>포트포워딩</td><td>공유기가 "바깥에서 443번으로 온 요청은 NAS로 보내라"고 길을 열어 주는 설정.</td></tr>
+</table>
+
+<h2>1. 물리적 구조 — 장비가 어디에 있나</h2>
+<p>사용자 기기는 인터넷을 거쳐 집 공유기에 닿고, 공유기가 요청을 NAS로 넘긴다. 서버 프로그램과 DB 파일은 모두 NAS 한 대 안에 있다.</p>
+<div class="fig">
+<svg viewBox="0 0 920 470" role="img" aria-label="물리적 구조도">
+<defs><marker id="h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#888"/></marker></defs>
+<text x="20" y="34" class="b">사용자 기기</text>
+<rect x="20" y="50" width="170" height="70" rx="8" class="ca"/><text x="105" y="82" text-anchor="middle" class="b">스마트폰</text><text x="105" y="102" text-anchor="middle" class="s">브라우저로 접속</text>
+<rect x="20" y="150" width="170" height="70" rx="8" class="ca"/><text x="105" y="182" text-anchor="middle" class="b">PC / 태블릿</text><text x="105" y="202" text-anchor="middle" class="s">브라우저로 접속</text>
+<ellipse cx="290" cy="135" rx="62" ry="42" class="bx"/><text x="290" y="132" text-anchor="middle" class="b">인터넷</text><text x="290" y="150" text-anchor="middle" class="s">도메인(DDNS)</text>
+<path d="M190 85 L232 118" class="ar"/><path d="M190 185 L232 152" class="ar"/>
+<rect x="385" y="95" width="125" height="80" rx="8" class="cc"/><text x="447" y="124" text-anchor="middle" class="b">공유기</text><text x="447" y="144" text-anchor="middle" class="s">포트포워딩</text><text x="447" y="160" text-anchor="middle" class="s">443 → NAS</text>
+<path d="M352 135 L385 135" class="ar"/>
+<rect x="545" y="20" width="360" height="435" rx="12" class="nas"/>
+<text x="563" y="46" class="b">시놀로지 NAS (집 안의 실물 장비)</text>
+<rect x="565" y="62" width="320" height="64" rx="8" class="cd"/><text x="725" y="88" text-anchor="middle" class="b">① 리버스 프록시 (DSM 내장)</text><text x="725" y="108" text-anchor="middle" class="s">HTTPS 인증서 · 도메인 연결</text>
+<rect x="565" y="156" width="320" height="140" rx="8" class="bx"/><text x="580" y="178" class="b">② Container Manager (Docker)</text>
+<rect x="585" y="192" width="280" height="86" rx="8" class="cb"/><text x="725" y="220" text-anchor="middle" class="b">퀴즈 서버 컨테이너</text><text x="725" y="240" text-anchor="middle" class="s">Node.js 프로그램 1개가</text><text x="725" y="258" text-anchor="middle" class="s">화면 파일 + API를 모두 제공</text>
+<rect x="565" y="326" width="320" height="52" rx="8" class="cc"/><text x="725" y="350" text-anchor="middle" class="b">③ 디스크: quiz.db</text><text x="725" y="368" text-anchor="middle" class="s">/volume1/docker/quiz/data</text>
+<rect x="565" y="398" width="320" height="42" rx="8" class="bx"/><text x="725" y="424" text-anchor="middle" class="b">④ Hyper Backup → 외장HDD / 클라우드</text>
+<path d="M510 135 L545 135 L545 94 L565 94" class="ar"/><text x="515" y="80" class="s">HTTPS</text>
+<path d="M725 126 L725 156" class="ar"/><text x="735" y="146" class="s">내부 8080</text>
+<path d="M725 296 L725 326" class="ar"/><text x="735" y="316" class="s">파일 읽기/쓰기</text>
+<path d="M725 378 L725 398" class="ard"/>
+<text x="20" y="300" class="b">집 안 Wi-Fi만 쓸 때</text>
+<text x="20" y="322" class="s">포트포워딩·도메인 없이 http://NAS의 IP:8080 으로 접속</text>
+<text x="20" y="342" class="s">→ 집 밖에서 쓰려면 위 그림 전체가 필요</text>
+</svg>
+</div>
+<h3>번호별 역할</h3>
+<ol>
+<li><b>리버스 프록시:</b> 바깥에서 오는 요청을 받아 퀴즈 서버로 넘기고 HTTPS 자물쇠를 붙인다.</li>
+<li><b>Container Manager:</b> 퀴즈 서버를 상자(컨테이너)에 담아 실행한다. NAS가 재부팅돼도 자동 재시작되게 설정한다.</li>
+<li><b>quiz.db:</b> 문제와 순위 기록이 들어 있는 파일. 컨테이너를 지워도 남도록 NAS 폴더에 연결(볼륨 마운트)해 둔다.</li>
+<li><b>Hyper Backup:</b> quiz.db를 정기 백업한다. 이 파일이 곧 모든 기록이다.</li>
+</ol>
+<p><b>보안 메모:</b> NAS 관리 화면(DSM, 5000/5001번)은 바깥에 열지 않는다. 열어 둘 길은 퀴즈용 443번 하나뿐이다. DSM 계정에는 2단계 인증을 켠다.</p>
+
+<h2>2. 논리적 구조 — 프로그램이 어떤 층으로 나뉘나</h2>
+<p>왼쪽은 브라우저에서 도는 부분, 오른쪽은 NAS 안 서버에서 도는 부분이다. 가운데 선이 둘을 잇는 API다. 브라우저의 화면과 게임 로직은 저장 방식을 모르고, <code>storage.js</code>라는 창구만 부른다. 그래서 저장 방식을 기기 저장에서 서버로 바꿔도 화면 코드는 그대로다.</p>
+<div class="fig">
+<svg viewBox="0 0 920 440" role="img" aria-label="논리적 구조도">
+<defs><marker id="h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#888"/></marker></defs>
+<text x="20" y="28" class="b">브라우저 (클라이언트)</text><text x="560" y="28" class="b">서버 (NAS 안 Node.js)</text>
+<rect x="10" y="40" width="380" height="380" rx="10" class="nas"/><rect x="540" y="40" width="370" height="380" rx="10" class="nas"/>
+<rect x="30" y="60" width="340" height="80" rx="8" class="ca"/><text x="200" y="88" text-anchor="middle" class="b">화면 (UI)</text><text x="200" y="110" text-anchor="middle" class="s">시작 · 문제 · 카테고리 전환 · 결과 · 순위표</text>
+<rect x="30" y="170" width="340" height="80" rx="8" class="cb"/><text x="200" y="198" text-anchor="middle" class="b">게임 로직</text><text x="200" y="220" text-anchor="middle" class="s">출제 · 보기 섞기 · 즉시 채점 · 점수 · 진행 상태</text>
+<rect x="30" y="280" width="340" height="110" rx="8" class="cc"/><text x="200" y="306" text-anchor="middle" class="b">storage.js (저장 창구)</text><text x="200" y="328" text-anchor="middle" class="s">loadQuestions() · saveRecord() · loadRanking()</text><text x="200" y="348" text-anchor="middle" class="s">서버 호출 → 실패하면 localStorage로 대체</text>
+<path d="M200 140 L200 170" class="ar"/><path d="M200 250 L200 280" class="ar"/>
+<rect x="560" y="60" width="330" height="70" rx="8" class="cd"/><text x="725" y="86" text-anchor="middle" class="b">라우터 (API 주소)</text><text x="725" y="108" text-anchor="middle" class="s">GET /api/questions · POST /api/records · GET /api/ranking</text>
+<rect x="560" y="155" width="330" height="70" rx="8" class="cb"/><text x="725" y="181" text-anchor="middle" class="b">서비스 (규칙)</text><text x="725" y="203" text-anchor="middle" class="s">점수 재계산 · 닉네임 검사 · 순위 정렬</text>
+<rect x="560" y="250" width="330" height="60" rx="8" class="cc"/><text x="725" y="276" text-anchor="middle" class="b">저장소 (SQL 담당)</text><text x="725" y="296" text-anchor="middle" class="s">DB를 읽고 쓰는 코드는 여기에만 둔다</text>
+<rect x="560" y="335" width="330" height="70" rx="8" class="bx"/><text x="725" y="361" text-anchor="middle" class="b">DB: quiz.db (SQLite)</text><text x="725" y="383" text-anchor="middle" class="s">questions 표 · records 표</text>
+<path d="M725 130 L725 155" class="ar"/><path d="M725 225 L725 250" class="ar"/><path d="M725 310 L725 335" class="ar"/>
+<path d="M370 335 L560 95" class="ar"/><text x="400" y="230" class="s" transform="rotate(-52 400 230)">HTTPS · JSON</text>
+<text x="400" y="430" class="s">화면은 storage.js 외에는 어디에도 직접 저장하지 않는다.</text>
+</svg>
+</div>
+<h3>층을 나누는 이유</h3>
+<ul>
+<li><b>화면/로직/저장 분리:</b> 문제가 생겼을 때 어느 층을 볼지 정해진다. 디자인을 바꿔도 점수 계산이 안 깨진다.</li>
+<li><b>storage.js 한 곳:</b> 1~3단계에서는 기기 저장으로 만들고, 4단계에서 이 파일 안쪽만 서버 호출로 바꾼다.</li>
+<li><b>서버에서 점수 재계산:</b> 브라우저가 보낸 점수를 믿지 않고, 보낸 답안으로 서버가 다시 계산해 점수 조작을 막는다.</li>
+</ul>
+
+<h3>데이터 표(DB 테이블)</h3>
+<table>
+<tr><th>표</th><th>열</th><th>설명</th></tr>
+<tr><td>questions</td><td>id, category, text, choice1~4, answer_index, explanation</td><td>문제 40개. 서버 시작 시 비어 있으면 <code>questions.js</code> 내용으로 채운다.</td></tr>
+<tr><td>records</td><td>id, nickname, total_score, history_score, science_score, geography_score, general_score, played_at</td><td>한 판이 끝날 때마다 한 줄 추가. 순위는 total_score 내림차순, 같으면 played_at이 빠른 순.</td></tr>
+</table>
+
+<h2>3. 한 판의 흐름 — 요청이 오가는 순서</h2>
+<p>서버와의 통신은 판 시작 때 1번, 끝날 때 1번뿐이다. 40문제를 푸는 동안은 통신이 없어서 NAS가 느려도 게임이 끊기지 않는다.</p>
+<div class="fig">
+<svg viewBox="0 0 920 520" role="img" aria-label="한 판의 흐름">
+<defs><marker id="h" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#888"/></marker></defs>
+<rect x="50" y="10" width="160" height="36" rx="6" class="ca"/><text x="130" y="33" text-anchor="middle" class="b">브라우저</text>
+<rect x="380" y="10" width="160" height="36" rx="6" class="cb"/><text x="460" y="33" text-anchor="middle" class="b">퀴즈 서버</text>
+<rect x="710" y="10" width="160" height="36" rx="6" class="cc"/><text x="790" y="33" text-anchor="middle" class="b">quiz.db</text>
+<path d="M130 46 V510" class="ll"/><path d="M460 46 V510" class="ll"/><path d="M790 46 V510" class="ll"/>
+<path d="M130 80 H458" class="ar"/><text x="145" y="72" class="s">① GET /api/questions (판 시작)</text>
+<path d="M460 120 H788" class="ar"/><text x="475" y="112" class="s">② 문제 40개 조회</text>
+<path d="M788 155 H462" class="ard"/><text x="475" y="147" class="s">③ 문제 목록</text>
+<path d="M458 190 H132" class="ard"/><text x="145" y="182" class="s">④ 문제 JSON 전달</text>
+<rect x="30" y="215" width="320" height="56" rx="8" class="ca"/><text x="190" y="239" text-anchor="middle" class="b">⑤ 40문제 진행 (통신 없음)</text><text x="190" y="258" text-anchor="middle" class="s">즉시 채점 · 1.5초 자동 넘김</text>
+<path d="M130 305 H458" class="ar"/><text x="145" y="297" class="s">⑥ POST /api/records (닉네임 + 답안 40개)</text>
+<rect x="300" y="322" width="320" height="44" rx="8" class="cb"/><text x="460" y="350" text-anchor="middle" class="s">⑦ 정답표와 대조해 점수 직접 계산</text>
+<path d="M460 395 H788" class="ar"/><text x="475" y="387" class="s">⑧ 기록 저장 + 상위 10개 조회</text>
+<path d="M788 430 H462" class="ard"/><text x="475" y="422" class="s">⑨ 결과</text>
+<path d="M458 470 H132" class="ard"/><text x="145" y="462" class="s">⑩ 내 점수 · 내 순위 · 순위표 전달</text>
+</svg>
+</div>
+
+<h2>4. 폴더 구조 (완성 후)</h2>
+<pre>Study-03/
+├─ public/                브라우저로 내려가는 파일
+│  ├─ index.html
+│  ├─ style.css
+│  └─ js/
+│     ├─ app.js           화면 전환
+│     ├─ game.js          게임 로직
+│     ├─ storage.js       저장 창구 (서버 호출 + 폴백)
+│     └─ questions.js     문제 원본 데이터
+├─ server/                NAS에서 도는 부분 (4단계)
+│  ├─ index.js            서버 시작, 라우터
+│  ├─ service.js          점수 재계산 등 규칙
+│  ├─ repository.js       SQLite 읽기/쓰기
+│  └─ seed.js             questions.js → DB 채우기
+├─ Dockerfile
+├─ docker-compose.yml
+└─ README.md              NAS 배포 순서</pre>
+
+<h2>5. 단계별 구조 — 1~4단계에서 무엇이 어떻게 자라나</h2>
+<p>같은 층 구조(화면 → 게임 로직 → storage.js → 저장소)를 단계마다 한 층씩 채워 간다. 아래 그림에서 초록은 그 단계에 새로 만드는 것, 주황은 그 단계에 고치는 것, 흰색은 이전 단계 것을 그대로 쓰는 것이다.</p>
+<div class="fig">
+<svg viewBox="0 0 920 440" role="img" aria-label="단계별 구조 변화">
+<g>
+<text x="117" y="26" text-anchor="middle" class="b">1단계 뼈대·데이터</text><text x="342" y="26" text-anchor="middle" class="b">2단계 게임 흐름</text><text x="567" y="26" text-anchor="middle" class="b">3단계 결과·순위</text><text x="792" y="26" text-anchor="middle" class="b">4단계 서버·NAS</text>
+<rect x="10" y="40" width="215" height="46" rx="8" class="nas"/><text x="117" y="60" text-anchor="middle" class="s">장비</text><text x="117" y="78" text-anchor="middle" class="s">내 PC 한 대</text>
+<rect x="235" y="40" width="215" height="46" rx="8" class="nas"/><text x="342" y="60" text-anchor="middle" class="s">장비</text><text x="342" y="78" text-anchor="middle" class="s">내 PC 한 대</text>
+<rect x="460" y="40" width="215" height="46" rx="8" class="nas"/><text x="567" y="60" text-anchor="middle" class="s">장비</text><text x="567" y="78" text-anchor="middle" class="s">내 PC 한 대</text>
+<rect x="685" y="40" width="215" height="46" rx="8" class="nas"/><text x="792" y="60" text-anchor="middle" class="s">장비</text><text x="792" y="78" text-anchor="middle" class="s">NAS + 모든 기기</text>
+</g>
+<g>
+<rect x="10" y="100" width="215" height="50" rx="8" class="bx" stroke-dasharray="4 4"/><text x="117" y="130" text-anchor="middle" class="s">화면 — 아직 없음</text>
+<rect x="235" y="100" width="215" height="50" rx="8" class="cb"/><text x="342" y="122" text-anchor="middle" class="b">화면</text><text x="342" y="140" text-anchor="middle" class="s">시작 · 문제 · 피드백</text>
+<rect x="460" y="100" width="215" height="50" rx="8" class="cc"/><text x="567" y="122" text-anchor="middle" class="b">화면 (추가)</text><text x="567" y="140" text-anchor="middle" class="s">전환 · 결과 · 순위표</text>
+<rect x="685" y="100" width="215" height="50" rx="8" class="bx"/><text x="792" y="130" text-anchor="middle" class="s">화면 — 그대로</text>
+</g>
+<g>
+<rect x="10" y="158" width="215" height="50" rx="8" class="bx" stroke-dasharray="4 4"/><text x="117" y="188" text-anchor="middle" class="s">게임 로직 — 아직 없음</text>
+<rect x="235" y="158" width="215" height="50" rx="8" class="cb"/><text x="342" y="180" text-anchor="middle" class="b">게임 로직</text><text x="342" y="198" text-anchor="middle" class="s">출제 · 채점 · 점수</text>
+<rect x="460" y="158" width="215" height="50" rx="8" class="cc"/><text x="567" y="180" text-anchor="middle" class="b">게임 로직 (추가)</text><text x="567" y="198" text-anchor="middle" class="s">이어하기 · 다시 하기</text>
+<rect x="685" y="158" width="215" height="50" rx="8" class="bx"/><text x="792" y="188" text-anchor="middle" class="s">게임 로직 — 그대로</text>
+</g>
+<g>
+<rect x="10" y="216" width="215" height="50" rx="8" class="cb"/><text x="117" y="238" text-anchor="middle" class="b">storage.js</text><text x="117" y="256" text-anchor="middle" class="s">기기 저장판 · 함수 3개</text>
+<rect x="235" y="216" width="215" height="50" rx="8" class="bx"/><text x="342" y="238" text-anchor="middle" class="b">storage.js</text><text x="342" y="256" text-anchor="middle" class="s">loadQuestions 사용</text>
+<rect x="460" y="216" width="215" height="50" rx="8" class="bx"/><text x="567" y="238" text-anchor="middle" class="b">storage.js</text><text x="567" y="256" text-anchor="middle" class="s">saveRecord · loadRanking 사용</text>
+<rect x="685" y="216" width="215" height="50" rx="8" class="cc"/><text x="792" y="238" text-anchor="middle" class="b">storage.js (내부 교체)</text><text x="792" y="256" text-anchor="middle" class="s">서버 호출 · 실패 시 기기 저장</text>
+</g>
+<g>
+<rect x="10" y="274" width="215" height="50" rx="8" class="cb"/><text x="117" y="296" text-anchor="middle" class="b">기기 저장소</text><text x="117" y="314" text-anchor="middle" class="s">questions.js + localStorage</text>
+<rect x="235" y="274" width="215" height="50" rx="8" class="bx"/><text x="342" y="296" text-anchor="middle" class="b">기기 저장소</text><text x="342" y="314" text-anchor="middle" class="s">그대로</text>
+<rect x="460" y="274" width="215" height="50" rx="8" class="bx"/><text x="567" y="296" text-anchor="middle" class="b">기기 저장소</text><text x="567" y="314" text-anchor="middle" class="s">기록 · 진행 상태가 쌓임</text>
+<rect x="685" y="274" width="215" height="50" rx="8" class="bx"/><text x="792" y="296" text-anchor="middle" class="b">기기 저장소</text><text x="792" y="314" text-anchor="middle" class="s">서버 장애 때만 사용</text>
+</g>
+<g>
+<rect x="10" y="332" width="215" height="50" rx="8" class="bx" stroke-dasharray="4 4"/><text x="117" y="362" text-anchor="middle" class="s">서버 — 없음</text>
+<rect x="235" y="332" width="215" height="50" rx="8" class="bx" stroke-dasharray="4 4"/><text x="342" y="362" text-anchor="middle" class="s">서버 — 없음</text>
+<rect x="460" y="332" width="215" height="50" rx="8" class="bx" stroke-dasharray="4 4"/><text x="567" y="362" text-anchor="middle" class="s">서버 — 없음</text>
+<rect x="685" y="332" width="215" height="50" rx="8" class="cb"/><text x="792" y="354" text-anchor="middle" class="b">서버 + quiz.db</text><text x="792" y="372" text-anchor="middle" class="s">Node · SQLite · Docker (NAS)</text>
+</g>
+<rect x="10" y="402" width="16" height="16" rx="3" class="cb"/><text x="32" y="415" class="s">새로 만듦</text>
+<rect x="110" y="402" width="16" height="16" rx="3" class="cc"/><text x="132" y="415" class="s">고침</text>
+<rect x="190" y="402" width="16" height="16" rx="3" class="bx"/><text x="212" y="415" class="s">이전 것 그대로</text>
+<rect x="320" y="402" width="16" height="16" rx="3" class="bx" stroke-dasharray="3 3"/><text x="342" y="415" class="s">아직 없음</text>
+</svg>
+</div>
+
+<h3>1단계 — 뼈대, 문제 데이터, 저장 창구</h3>
+<ul>
+<li><b>만드는 것:</b> <code>public/</code> 폴더 뼈대, 문제 40개(<code>questions.js</code>), <code>storage.js</code>(기기 저장판), 문제 검증 스크립트</li>
+<li><b>구조상 의미:</b> 가장 아래층(저장 창구)부터 만든다. 화면이 아직 없어도, 나중에 서버로 갈아끼울 접점이 처음부터 정해진다.</li>
+<li><b>장비:</b> 내 PC. 서버 없음.</li>
+<li><b>끝났다는 기준:</b> 검증 스크립트 통과(카테고리별 10개, 보기 4개, 정답 번호 범위, id 중복 없음).</li>
+</ul>
+<h3>2단계 — 핵심 게임 흐름</h3>
+<ul>
+<li><b>만드는 것:</b> <code>app.js</code>(화면 전환), <code>game.js</code>(출제·채점·점수), 시작·문제·피드백 화면</li>
+<li><b>구조상 의미:</b> 위 두 층이 생긴다. 화면은 로직만 부르고, 로직은 <code>storage.loadQuestions()</code>로만 문제를 받는다. 답안은 원본 보기 순서 기준 번호로 기록해 4단계 서버 채점과 맞춘다.</li>
+<li><b>장비:</b> 내 PC. 서버 없음.</li>
+<li><b>끝났다는 기준:</b> 40문제를 끝까지 풀고 총점·카테고리별 점수가 맞다. 한 판이 3~4분 안에 끝난다.</li>
+</ul>
+<h3>3단계 — 결과, 순위, 마감</h3>
+<ul>
+<li><b>만드는 것:</b> 카테고리 전환 화면, 결과 화면, 순위표, 다시 하기, 이어하기</li>
+<li><b>구조상 의미:</b> <code>saveRecord()</code>와 <code>loadRanking()</code>이 처음 실제로 쓰인다. 서버가 없어도 완성된 게임이며, 이 상태가 4단계의 "롤백 지점"이 된다.</li>
+<li><b>장비:</b> 내 PC. 순위는 이 기기 안에만 있다.</li>
+<li><b>끝났다는 기준:</b> 키보드만으로 완주, 360px 폭에서 레이아웃 유지, 순위 정렬·동점 테스트 통과.</li>
+</ul>
+<h3>4단계 — 서버 추가와 NAS 배포</h3>
+<ul>
+<li><b>만드는 것:</b> <code>server/</code>(라우터·서비스·저장소·시드), SQLite DB, <code>Dockerfile</code>, <code>docker-compose.yml</code>, NAS 배포 README</li>
+<li><b>구조상 의미:</b> <code>storage.js</code> 안쪽만 서버 호출로 바꾼다. 화면과 게임 로직은 수정하지 않는다. 서버가 점수를 다시 계산하고, 서버가 죽으면 기기 저장으로 대체된다.</li>
+<li><b>장비:</b> 1장의 물리 구조도 전체. 집 안만 쓰면 NAS와 같은 Wi-Fi 기기만, 집 밖에서도 쓰려면 공유기·도메인·HTTPS까지 필요하다.</li>
+<li><b>끝났다는 기준:</b> 서로 다른 두 기기에서 같은 순위표가 보인다. 서버를 끄면 기기 저장으로 동작한다. 서버 테스트 통과. NAS 실기기 배포는 직접 확인한다.</li>
+</ul>
+<p class="mute">3단계까지 끝나면 서버 없이도 완성된 게임이다. 4단계는 같은 게임을 NAS로 옮기는 작업이다.</p>
+</main>
+</body>
+</html>
