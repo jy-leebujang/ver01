@@ -6,7 +6,7 @@ import { createApp } from './index.js';
 import { createRepository } from './repository.js';
 import { createService } from './service.js';
 import { seedIfEmpty } from './seed.js';
-import { QUESTIONS } from '../public/js/questions.js';
+import { perfect } from './fixtures.js';
 
 async function withServer(fn, options) {
   const repo = createRepository(':memory:');
@@ -24,9 +24,8 @@ async function withServer(fn, options) {
 
 const post = (base, body, raw = false) =>
   fetch(`${base}/api/records`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: raw ? body : JSON.stringify(body) });
-const perfect = () => QUESTIONS.map((q) => ({ questionId: q.id, choiceIndex: q.answerIndex }));
 
-test('GET /api/questions: 40문제, 카테고리 순서', async () => {
+test('GET /api/questions: 문제은행 40문제, 카테고리 순서', async () => {
   await withServer(async (base) => {
     const res = await fetch(`${base}/api/questions`);
     assert.equal(res.status, 200);
@@ -41,9 +40,9 @@ test('POST /api/records: 점수·카테고리별 점수·순위를 돌려준다'
     const res = await post(base, { nickname: '철수', answers: perfect() });
     assert.equal(res.status, 201);
     const body = await res.json();
-    assert.equal(body.totalScore, 400);
+    assert.equal(body.totalScore, 441); // 만점: 시간 점수 15 x 20 + 연속 정답 보너스 141
     assert.equal(body.rank, 1);
-    assert.deepEqual(body.categoryScores, { history: 100, science: 100, geography: 100, general: 100 });
+    assert.deepEqual(body.categoryScores, { history: 86, science: 105, geography: 125, general: 125 });
     const ranking = await (await fetch(`${base}/api/ranking`)).json();
     assert.equal(ranking[0].nickname, '철수');
     assert.equal(ranking[0].playedAt, body.playedAt);

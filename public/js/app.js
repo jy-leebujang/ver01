@@ -5,11 +5,12 @@ import * as G from './game.js';
 
 const FEEDBACK_MS = 1500; // 피드백을 보여준 뒤 자동으로 다음 문제로 넘어가는 시간
 const TRANSITION_MS = 1500; // 카테고리 전환 화면 표시 시간
-const MAX_SCORE = 400;
+const TICK_MS = 100; // 남은 시간 표시를 갱신하는 간격
 const root = document.getElementById('app');
 
 let game = null;
 let autoTimer = null;
+let tickTimer = null; // 문제 제한 시간을 세는 타이머
 let ui = null; // 현재 문제 화면의 요소 모음
 let skip = null; // 카테고리 전환 화면에서 바로 넘기는 함수
 
@@ -24,9 +25,15 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
+function stopTimer() {
+  clearInterval(tickTimer);
+  tickTimer = null;
+}
+
 function show(...nodes) {
   clearTimeout(autoTimer);
   autoTimer = null;
+  stopTimer();
   ui = null;
   skip = null;
   root.replaceChildren(...nodes);
@@ -68,7 +75,8 @@ function renderStart(message = '') {
 
   show(
     el('h1', { text: '상식 퀴즈' }),
-    el('p', { class: 'sub', text: '한국사 · 과학 · 지리 · 일반상식, 총 40문제' }),
+    el('p', { class: 'sub', text: `한국사 · 과학 · 지리 · 일반상식, 총 ${G.QUESTIONS_PER_GAME}문제` }),
+    el('p', { class: 'rules', text: `문제당 ${G.QUESTION_TIME_MS / 1000}초 · 빨리 맞힐수록 높은 점수 · 연속 정답 보너스 · 힌트를 쓰면 감점` }),
     form,
     button('순위표 보기', 'secondary', renderRankingScreen),
   );
@@ -122,14 +130,23 @@ function renderQuestion() {
   bar.append(el('div', { class: 'bar-fill' }));
   bar.firstChild.style.width = `${((p.overall - 1) / p.total) * 100}%`;
 
+  const comboEl = el('span', { class: 'combo' });
+  setCombo(comboEl);
+
   const header = el(
     'header',
     { class: 'status' },
     el('span', { class: 'cat', text: G.CATEGORY_LABELS[p.category] }),
     el('span', { text: `${p.inCategory}/${p.categoryTotal}` }),
     el('span', { text: `전체 ${p.overall}/${p.total}` }),
+    comboEl,
     scoreEl,
   );
+
+  // 남은 시간 막대. 마지막 5초는 숫자 카운트다운도 보여준다.
+  const timerFill = el('div', { class: 'timer-fill' });
+  const countEl = el('span', { class: 'countdown', 'aria-hidden': 'true', hidden: '' });
+  const timerEl = el('div', { class: 'timer' }, el('div', { class: 'timer-bar' }, timerFill), countEl);
 
   const buttons = G.displayChoices(item).map((text, pos) => {
     const mark = el('span', { class: 'mark', 'aria-hidden': 'true' });
@@ -144,47 +161,118 @@ function renderQuestion() {
     return { btn, mark };
   });
 
+  const hintBtn = el('button', {
+    class: 'secondary hint-btn',
+    type: 'button',
+    text: `힌트 보기 (이 문제 점수 ${100 - G.HINT_KEEP_PERCENT}% 감점) [H]`,
+  });
+  hintBtn.addEventListener('click', useHint);
+  const hintBox = el('p', { class: 'hint-box', hidden: '' });
+
   const feedback = el('button', { class: 'feedback', type: 'button', hidden: '' });
   feedback.addEventListener('click', goNext);
-  const live = el('div', { 'aria-live': 'polite' }, feedback);
+  const live = el('div', { 'aria-live': 'polite' }, hintBox, feedback);
 
   show(
     header,
     bar,
+    timerEl,
     el('h2', { class: 'question', text: item.question.text }),
     el('div', { class: 'choices' }, ...buttons.map((b) => b.btn)),
+    hintBtn,
     live,
   );
-  ui = { buttons, feedback, scoreEl };
+  ui = { buttons, feedback, scoreEl, comboEl, timerEl, timerFill, countEl, hintBtn, hintBox, startedAt: performance.now() };
+  startTimer();
+}
+
+/** 연속 정답이 2 이상일 때만 표시한다 */
+function setCombo(comboEl) {
+  comboEl.textContent = game.streak >= 2 ? `${game.streak}연속` : '';
+}
+
+/* ---------- 문제 제한 시간 ---------- */
+
+function elapsedMs() {
+  return Math.min(G.QUESTION_TIME_MS, Math.max(0, Math.round(performance.now() - ui.startedAt)));
+}
+
+function startTimer() {
+  const tick = () => {
+    if (!ui) return;
+    const left = Math.max(0, G.QUESTION_TIME_MS - (performance.now() - ui.startedAt));
+    const urgent = left <= G.COUNTDOWN_MS;
+    ui.timerFill.style.width = `${(left / G.QUESTION_TIME_MS) * 100}%`;
+    ui.timerEl.classList.toggle('urgent', urgent);
+    ui.countEl.hidden = !urgent;
+    if (urgent) ui.countEl.textContent = String(Math.ceil(left / 1000));
+    if (left <= 0) timeUp();
+  };
+  tickTimer = setInterval(tick, TICK_MS);
+  tick();
+}
+
+function timeUp() {
+  if (!game || !ui) return;
+  stopTimer();
+  const result = G.timeoutCurrent(game);
+  if (result) showResult(result);
+}
+
+function useHint() {
+  if (!game || !ui) return;
+  const text = G.useHint(game);
+  if (!text) return;
+  ui.hintBox.textContent = `힌트: ${text}`;
+  ui.hintBox.hidden = false;
+  ui.hintBtn.disabled = true;
 }
 
 function choose(pos) {
   if (!game || !ui) return;
-  const result = G.answerCurrent(game, pos);
-  if (!result) return;
+  stopTimer();
+  const result = G.answerCurrent(game, pos, elapsedMs());
+  if (result) showResult(result);
+}
 
+/** 이번 문제 결과 화면: 정답/오답 표시, 얻은 점수, 해설 */
+function showResult(result) {
   ui.buttons.forEach(({ btn }) => {
     btn.disabled = true;
   });
-  const picked = ui.buttons[result.pickedPos];
+  ui.hintBtn.disabled = true;
   const correct = ui.buttons[result.correctPos];
   correct.btn.classList.add('correct');
   correct.mark.textContent = '✓';
-  if (!result.correct) {
+  if (!result.correct && !result.timedOut) {
+    const picked = ui.buttons[result.pickedPos];
     picked.btn.classList.add('wrong');
     picked.mark.textContent = '✗';
   }
   ui.scoreEl.textContent = `${game.score}점`;
+  setCombo(ui.comboEl);
+  ui.timerEl.classList.remove('urgent');
 
-  const head = el('strong', { text: result.correct ? '✓ 정답!' : '✗ 오답' });
+  const headText = result.correct ? '✓ 정답!' : result.timedOut ? '⏱ 시간 초과' : '✗ 오답';
+  const head = el('strong', { text: headText });
   head.className = result.correct ? 'ok' : 'no';
   ui.feedback.replaceChildren(
     head,
+    el('span', { class: 'points', text: pointsText(result) }),
     el('span', { class: 'explain', text: result.explanation }),
     el('span', { class: 'skip', text: '탭하거나 Space를 누르면 바로 넘어가요' }),
   );
   ui.feedback.hidden = false;
   autoTimer = setTimeout(goNext, FEEDBACK_MS);
+}
+
+/** 예: "+14점 (속도 12, 3연속 +2)", "+10점 (속도 15, 힌트 -5)", 오답은 "0점" */
+function pointsText(result) {
+  if (!result.correct) return '0점';
+  const parts = [`속도 ${result.base + result.hintPenalty}`];
+  if (result.hintPenalty > 0) parts.push(`힌트 -${result.hintPenalty}`);
+  if (result.bonus > 0) parts.push(`${result.streak}연속 +${result.bonus}`);
+  return `+${result.points}점 (${parts.join(', ')})`;
 }
 
 function goNext() {
@@ -202,14 +290,13 @@ function goNext() {
 function renderTransition() {
   const prev = game.items[game.index - 1].question.category;
   const next = G.currentItem(game).question.category;
-  const perCategory = game.items.filter((it) => it.question.category === prev).length;
   const proceed = () => renderQuestion();
 
   const panel = el(
     'button',
     { class: 'transition', type: 'button' },
     el('strong', { class: 'done', text: `${G.CATEGORY_LABELS[prev]} 끝!` }),
-    el('span', { class: 'cat-score', text: `${game.categoryScores[prev]}점 / ${perCategory * G.POINTS_PER_CORRECT}점` }),
+    el('span', { class: 'cat-score', text: `${game.categoryScores[prev]}점` }),
     el('span', { class: 'next', text: `다음은 ${G.CATEGORY_LABELS[next]}` }),
   );
   panel.addEventListener('click', proceed);
@@ -255,7 +342,8 @@ function renderResult(finished, record, rank, ranking, saved) {
       'div',
       { class: 'card' },
       el('p', { class: 'total', text: `${finished.score}점` }),
-      el('p', { class: 'sub center', text: `만점 ${MAX_SCORE}점 · 정답률 ${G.accuracy(finished)}% (${correct}/${finished.items.length})` }),
+      el('p', { class: 'sub center', text: `만점 ${G.maxScore()}점 · 정답률 ${G.accuracy(finished)}% (${correct}/${finished.items.length})` }),
+      el('p', { class: 'sub center', text: `최대 연속 정답 ${finished.maxStreak}` }),
       rankText ? el('p', { class: 'my-rank', text: rankText }) : '',
       el('ul', { class: 'cats' }, ...rows),
     ),
@@ -324,6 +412,9 @@ document.addEventListener('keydown', (event) => {
     if (['1', '2', '3', '4'].includes(event.key)) {
       event.preventDefault();
       choose(Number(event.key) - 1);
+    } else if (event.key === 'h' || event.key === 'H') {
+      event.preventDefault();
+      useHint();
     }
   } else if (event.key === ' ' || event.key === 'Enter') {
     event.preventDefault();

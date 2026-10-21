@@ -91,6 +91,22 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); ou
 .bar { height: 6px; background: var(--line); border-radius: 3px; margin: 8px 0 20px; overflow: hidden; }
 .bar-fill { height: 100%; background: var(--accent); }
 .question { font-size: 22px; line-height: 1.4; margin: 0 0 16px; }
+.rules { color: var(--mute); font-size: 14px; margin: -12px 0 20px; }
+.status .combo { color: var(--ok); font-weight: 700; }
+
+/* 문제 제한 시간: 막대는 줄어들고, 마지막 5초는 숫자 카운트다운이 붙는다 */
+.timer { display: flex; align-items: center; gap: 10px; margin: -8px 0 16px; min-height: 28px; }
+.timer-bar { flex: 1; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+.timer-fill { width: 100%; height: 100%; background: var(--accent); }
+.timer.urgent .timer-fill { background: var(--no); }
+.countdown { min-width: 1.4em; font-size: 24px; font-weight: 800; text-align: center; color: var(--no); }
+.countdown[hidden] { display: none; }
+
+.hint-btn { min-height: 44px; font-size: 15px; }
+.hint-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.hint-box { margin: 10px 0 0; padding: 10px 14px; background: var(--hl); border-radius: 10px; }
+.hint-box[hidden] { display: none; }
+.feedback .points { font-weight: 700; }
 
 .choices { display: grid; gap: 10px; }
 .choice {

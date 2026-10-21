@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { createRepository } from './repository.js';
 import { createService } from './service.js';
 import { seedIfEmpty } from './seed.js';
-import { QUESTIONS } from '../public/js/questions.js';
+import { QUESTIONS, perfect as perfectAnswers, zero as zeroAnswers } from './fixtures.js';
 
 const rec = (nickname, totalScore, playedAt) => ({
   nickname,
@@ -73,8 +73,8 @@ test('서비스+저장소: 두 번 제출하면 순위와 순위표가 일관된
   await seedIfEmpty(repo);
   let tick = 0;
   const service = createService(repo, { now: () => new Date(Date.UTC(2026, 0, 1, 0, 0, tick++)) });
-  const perfect = QUESTIONS.map((q) => ({ questionId: q.id, choiceIndex: q.answerIndex }));
-  const zero = QUESTIONS.map((q) => ({ questionId: q.id, choiceIndex: (q.answerIndex + 1) % 4 }));
+  const perfect = perfectAnswers();
+  const zero = zeroAnswers();
   const a = service.submitRecord({ nickname: '만점', answers: perfect });
   const b = service.submitRecord({ nickname: '빵점', answers: zero });
   const c = service.submitRecord({ nickname: '또만점', answers: perfect });

@@ -21,10 +21,10 @@ See `architecture.html`. Stages 1-3 are a pure HTML/CSS/JS client under `public/
 
 A single-player trivia ("상식 퀴즈") web game. The product spec is the PRD doc "상식 퀴즈 게임 PRD" (https://claude.ai/code/artifact/ab8db41e-ee13-48f2-9344-f1fb4f3745db); it is not stored in the repo, so read it there before implementing. Key constraints from it:
 
-- 4-choice multiple choice; categories 한국사, 과학, 지리, 일반상식, 10 questions each (40 total).
+- 4-choice multiple choice; categories 한국사, 과학, 지리, 일반상식, 10 questions each in the question bank (40 total).
 - Instant correct/incorrect feedback with a one-sentence explanation, auto-advancing after 1.5s.
-- One full game must finish in 3-4 minutes (~5s per question).
-- Scoring: 10 points per correct answer (max 400); the leaderboard keeps the top 10 by score, ties broken by earlier date.
+- **Changed from the PRD (2026-10-21, user request):** a game is 20 questions (5 random per category, fixed category order), 10s per question (countdown shown for the last 5s; timeout = wrong), faster correct answers score more (15/12/10/8 points at ≤3/5/8/10s), a hint button shows the first half of the explanation for 30% off that question's time points, and consecutive correct answers add +2 (2+), +5 (5+), +10 (10+) per question. Max score is 441. All of these numbers live only in `public/js/scoring.js`, which both `game.js` and `server/service.js` import; change them there and update the tests. Answers sent to the server are `{ questionId, choiceIndex (null = timeout), elapsedMs, hintUsed }` in play order. The server cannot verify `elapsedMs`/`hintUsed` (browser-reported), it only checks ranges.
+- The leaderboard keeps the top 10 by score, ties broken by earlier date. Records saved before the 2026-10-21 scoring change use the old 400-point scale, so the NAS ranking should be reset (README section 5).
 - Questions are static data; only play records are persisted (browser localStorage by default; server-shared ranking is an open issue in the PRD).
 
 
