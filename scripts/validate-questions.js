@@ -1,9 +1,11 @@
 // Created: 2026-10-18 14:24
 // 문제 데이터 검증: node scripts/validate-questions.js
 import { QUESTIONS } from '../public/js/questions.js';
+import { QUESTIONS_PER_CATEGORY } from '../public/js/scoring.js';
 
 const CATEGORIES = ['history', 'science', 'geography', 'general'];
-const PER_CATEGORY = 10;
+// 한 판에 카테고리당 이만큼 뽑으므로, 문제은행은 카테고리마다 최소 이 수 이상이어야 한다. 더 많아도 된다.
+const MIN_PER_CATEGORY = QUESTIONS_PER_CATEGORY;
 const MAX_EXPLANATION = 40;
 
 const errors = [];
@@ -44,9 +46,8 @@ for (const q of QUESTIONS) {
 }
 
 for (const c of CATEGORIES) {
-  if (counts[c] !== PER_CATEGORY) fail(`${c} 카테고리는 ${PER_CATEGORY}개여야 하는데 ${counts[c]}개`);
+  if (counts[c] < MIN_PER_CATEGORY) fail(`${c} 카테고리는 최소 ${MIN_PER_CATEGORY}개여야 하는데 ${counts[c]}개`);
 }
-if (QUESTIONS.length !== CATEGORIES.length * PER_CATEGORY) fail(`전체 ${QUESTIONS.length}개 (40개여야 함)`);
 
 console.log('카테고리별 문제 수:', counts);
 console.log('정답 위치 분포(0~3번):', answerCounts);

@@ -6,7 +6,7 @@ import { createApp } from './index.js';
 import { createRepository } from './repository.js';
 import { createService } from './service.js';
 import { seedIfEmpty } from './seed.js';
-import { perfect } from './fixtures.js';
+import { perfect, QUESTIONS } from './fixtures.js';
 
 async function withServer(fn, options) {
   const repo = createRepository(':memory:');
@@ -30,7 +30,7 @@ test('GET /api/questions: 문제은행 40문제, 카테고리 순서', async () 
     const res = await fetch(`${base}/api/questions`);
     assert.equal(res.status, 200);
     const list = await res.json();
-    assert.equal(list.length, 40);
+    assert.equal(list.length, QUESTIONS.length); // 문제은행 전체
     assert.deepEqual([...new Set(list.map((q) => q.category))], ['history', 'science', 'geography', 'general']);
   });
 });
