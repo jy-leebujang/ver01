@@ -66,6 +66,7 @@ function renderStart(message = '') {
     hint.textContent = input.value && !result.ok ? result.message : '';
   });
 
+  const rankingBox = el('div', { 'aria-live': 'polite' }, el('p', { class: 'sub', text: '불러오는 중…' }));
   const form = el('form', { class: 'card' }, el('label', { for: 'nickname', text: '닉네임' }), input, hint, start);
   form.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -78,9 +79,22 @@ function renderStart(message = '') {
     el('p', { class: 'sub', text: `한국사 · 과학 · 지리 · 일반상식, 총 ${G.QUESTIONS_PER_GAME}문제` }),
     el('p', { class: 'rules', text: `문제당 ${G.QUESTION_TIME_MS / 1000}초 · 빨리 맞힐수록 높은 점수 · 연속 정답 보너스 · 힌트를 쓰면 감점` }),
     form,
-    button('순위표 보기', 'secondary', renderRankingScreen),
+    el('h2', { class: 'section', text: '순위표' }),
+    rankingBox,
   );
   input.focus();
+  fillStartRanking(rankingBox);
+}
+
+/** 시작 화면의 순위표. 서버 응답을 기다리는 동안 다른 화면으로 넘어갔으면 아무것도 하지 않는다. */
+async function fillStartRanking(box) {
+  let ranking = [];
+  try {
+    ranking = await loadRanking();
+  } catch {
+    // 빈 순위표로 보여준다.
+  }
+  if (box.isConnected) box.replaceChildren(rankingTable(ranking));
 }
 
 async function startGame(nickname) {
@@ -382,16 +396,6 @@ function rankingTable(ranking, highlightPlayedAt = null) {
     el('thead', {}, el('tr', {}, el('th', { text: '순위' }), el('th', { text: '닉네임' }), el('th', { class: 'num-col', text: '점수' }), el('th', { text: '날짜' }))),
     el('tbody', {}, ...body),
   );
-}
-
-async function renderRankingScreen() {
-  let ranking = [];
-  try {
-    ranking = await loadRanking();
-  } catch {
-    // 빈 순위표로 보여준다.
-  }
-  show(el('h1', { text: '순위표' }), rankingTable(ranking), button('돌아가기', 'secondary', () => renderStart()));
 }
 
 /* ---------- 키보드: 1~4 보기 선택, Space/Enter 다음 ---------- */
